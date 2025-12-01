@@ -1,0 +1,98 @@
+Used to keep track of changes and outcomes
+
+Notes: Document uses Semantic versioning, meaning: first digit is a Major change, second is a minor, and third digit is a patch.
+
+
+-----------------------------------------------------------------------------------------------------------------------------------
+v1.0.0
+
+Changes --
+
+N/A
+
+Output --
+
+Overall Accuracy: 43.52%
+Recall: 0.26
+F1 Score: 0.16
+Confusion Matrix:
+[[  3   0   0 255]
+ [  1   1   0  60]
+ [  1   0   0  36]
+ [  0   0   0 268]]
+
+Analysis -- 
+
+Overpredicting on punt for all play types
+
+-----------------------------------------------------------------------------------------------------------------------------------
+v1.1.0
+
+Changes --
+
+Removed oversampling from punt, by removing 1/4 of the plays
+
+Output --
+
+Overall Accuracy: 46.42%
+Recall: 0.25
+F1 Score: 0.17
+Confusion Matrix:
+[[  4   2   0 241]
+ [  2   0   0  51]
+ [  1   0   0  31]
+ [  1   0   0 281]]
+
+Analysis --
+
+Overpredicting on punt for all play types
+
+-----------------------------------------------------------------------------------------------------------------------------------
+v1.2.0
+
+Changes --
+
+Added biodirection LSTM, increased Units, added dropout layers to prevent overfitting, 
+normiliazed batch size, increased number of units in dense layer, used Adam optimizer
+for learning rate
+
+Output --
+
+Overall Accuracy: 39.90%
+Recall: 0.25
+F1 Score: 0.14
+Confusion Matrix:
+[[244   0   0   3]
+ [ 51   0   0   2]
+ [ 32   0   0   0]
+ [281   0   0   1]]
+
+Analysis --
+
+Overpredicting on field goal for all play types, decrease on overall accuracy
+
+-----------------------------------------------------------------------------------------------------------------------------------
+v1.3.0
+
+Changes --
+
+Removed previous changes, added more density from 100 to 200
+
+Output --
+
+Overall Accuracy: 46.42%
+Recall: 0.25
+F1 Score: 0.17
+Confusion Matrix:
+[[  4   2   0 241]
+ [  3   0   0  50]
+ [  0   0   0  32]
+ [  1   0   0 281]]
+
+Analysis --
+
+Overpredicting on punt for all play types, exactly like v1.1.0, even with 2x desnity 
+
+-----------------------------------------------------------------------------------------------------------------------------------
+
+TODO: I need to add a way to detect number of kickers, place holders, or place kickers. Need to add these columns to csv files.
