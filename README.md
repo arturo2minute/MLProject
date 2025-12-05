@@ -7,6 +7,7 @@ Create venv
 Python 3.13
 opencv-python
 pip-25.3
+onnxruntime
 
 Steps on how to use:
 

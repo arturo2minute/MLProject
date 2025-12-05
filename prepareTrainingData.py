@@ -11,7 +11,8 @@ import time
 import cv2
 import csv
 import random
-import torch
+import json
+from collections import Counter
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "utils"))
 
@@ -22,7 +23,7 @@ import utils.shared.DDamenUtils as DD
 
 directory = 'C:\\Users\\arturo.diaz\\Documents\\PLAYTYPE_EXPERIMENT\\SMALL_DATASET'
 stagingDir = 'C:\\Users\\arturo.diaz\\Documents\\PLAYTYPE_EXPERIMENT\\STAGING\\'
-showVideo = True
+showVideo = False
         
 #==================================================== Constants ====================================================
 
@@ -194,8 +195,8 @@ def load_playTypeClass_data(playTypeClass, data, videoPath, currentFrame):
     # NOTE: the ground truth value for this play is in the directory of the video file
     playTypeTruthValue = find_class_name_in_path(videoPath)
     if playTypeTruthValue is None:
-        print("Unable to find Truth in {0} ...".format(videoPath))
-        return
+        raise ValueError(f"Unable to find Truth label in path: {videoPath}")
+    
     data.append([playTypeTruthValue, str(currentFrame), str(prediction), str((confidence * 100))])
 
 def load_offenseClass_data(offenseClass, data):
@@ -279,7 +280,7 @@ def load_nn(type, number, NNSize, NN_Type):
     #
 	# INIT: Load the Neural Networks
 	#
-    NNrootDir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'nn')
+    NNrootDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nn")
     modelPath = os.path.join(NNrootDir, "models", type, number, "best.onnx")
     
     NN = NNType()
@@ -313,6 +314,14 @@ def load_nn(type, number, NNSize, NN_Type):
 
     return ObjectDetector(NN.DNN_WEIGHTS, NN.DNN_CONFIG, NN.DNN_CLASSNAMES, NN.DEFAULT_NETWORK_SIZE)
 
+def summarize_split(files, name):
+    counts = Counter()
+    for path in files:
+        label = find_class_name_in_path(path)
+        counts[label] += 1
+    print(f"\n{name} split summary ({len(files)} videos):")
+    for cls_name in CLASS_NAMES:
+        print(f"  {cls_name}: {counts.get(cls_name, 0)}")
 
 #
 #============================================ Main Driver code ===========================================
@@ -335,6 +344,7 @@ def main():
     
     test_path = output_path + 'TEST\\'
     train_path = output_path + 'TRAIN\\'
+    val_path   = output_path + 'VAL\\'
     
     if not os.path.isdir(input_path):
         print(f"Error: The input directory {input_path} does not exist.")
@@ -358,14 +368,44 @@ def main():
             if filename.endswith('.mp4'):
                 video_files.append(os.path.join(dirpath, filename))
                 
-     # Shuffle the list of files
-    random.shuffle(video_files)
+    # Normalize order so os.walk randomness doesn’t matter
+    video_files = sorted(video_files)
+
+    splits_path = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), "MODEL"), "splits.json")
     
-    # Split the files into train and test sets (80% train, 20% test)
-    split_index = int(0.8 * len(video_files))
-    train_files = video_files[:split_index]
-    test_files = video_files[split_index:]
+    if os.path.exists(splits_path):
+        # Reuse existing split (deterministic, auditable)
+        with open(splits_path, "r") as f:
+            splits = json.load(f)
+        train_files = splits["train"]
+        val_files = splits["val"]
+        test_files = splits["test"]
+        print(f"Loaded existing split from {splits_path}")
+    else:
+        # Create a new split once
+        rng = random.Random(42)
+        rng.shuffle(video_files)
+
+        total = len(video_files)
+        test_size = int(0.20 * total)
+        val_size  = int(0.10 * total)
+
+        # 20% test, 10% val, remaining (~70%) train
+        test_files = video_files[:test_size]
+        val_files  = video_files[test_size:test_size + val_size]
+        train_files = video_files[test_size + val_size:]
+
+        splits = {"train": train_files, "val":   val_files, "test":  test_files}
+
+        os.makedirs(os.path.dirname(splits_path), exist_ok=True)
+        with open(splits_path, "w") as f:
+            json.dump(splits, f, indent=2)
+        print(f"Wrote new 70/10/20 split to {splits_path}")
     
+    summarize_split(train_files, "TRAIN")
+    summarize_split(val_files,   "VAL")
+    summarize_split(test_files,  "TEST")
+
     # Process the training videos
     process_videos(train_files, train_path, playTypeClassifier, offenseDetector, debug, videoPlayer, SAMPLE_RATE)
     
