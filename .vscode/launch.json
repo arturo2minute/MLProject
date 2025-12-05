@@ -1,0 +1,44 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Dev Prepare Training Data",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/prepareTrainingData.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": ["--dev"]
+    },
+    {
+      "name": "Prod Prepare Training Data",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/prepareTrainingData.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--prod",
+        "--input", "C:/Users/arturo.diaz/Documents/PLAYTYPE_EXPERIMENT/SMALL_DATASET",
+        "--output", "C:/Users/arturo.diaz/Documents/PLAYTYPE_EXPERIMENT/STAGING"]
+    },
+    {
+      "name": "Create Train Model",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/createTrainLSTM.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": []
+    },
+    {
+      "name": "Load Test Model",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/loadTestLSTM.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": []
+    }
+  ]
+}

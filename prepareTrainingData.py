@@ -15,16 +15,13 @@ import torch
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "utils"))
 
-from shared.NNClassifier import *
-from shared.NNDetector import *
-import shared.DDamenUtils as DD
+from utils.shared.NNClassifier import *
+from utils.shared.NNDetector import *
+import utils.shared.DDamenUtils as DD
 #==================================================== DEBUGGING ====================================================
 
-#NOTE: Only enable DEVELOPER_DEBUGGING_MODE if the debugger is attached and this is the main script (vs. being included by a parent script like Bobby.py)
-DEVELOPER_DEBUGGING_MODE = True if sys.gettrace() is not None and __name__ == '__main__' else False
-
-directory = 'C:\\Users\\ArturoD\\Documents\\PLAYTYPE_EXPERIMENT\\SMALL_DATASET'
-stagingDir = 'C:\\Users\\ArturoD\\Documents\\PLAYTYPE_EXPERIMENT\\STAGING\\'
+directory = 'C:\\Users\\arturo.diaz\\Documents\\PLAYTYPE_EXPERIMENT\\SMALL_DATASET'
+stagingDir = 'C:\\Users\\arturo.diaz\\Documents\\PLAYTYPE_EXPERIMENT\\STAGING\\'
 showVideo = True
         
 #==================================================== Constants ====================================================
@@ -83,47 +80,47 @@ HEADER_LIST = ["Truth", "Frame", "Prediction", "Confidence",
                ]
 
 VALID_OFFENSIVE_CLASS = {
-"OL": 1,
-"CENTER": 2,
-"QB": 3,
-"T": 4,
-"F": 5,
-"LTE": 6,
-"LUNBTACKLE": 7,
-"RTE": 8,
-"RUNBTACKLE": 9,
-"LWG1": 10,
-"LWG2": 11,
-"RWG1": 12,
-"RWG2": 13,
-"WR_R1": 14,
-"WR_R2": 15,
-"WR_R3": 16,
-"WR_R4": 17,
-"WR_R5": 18,
-"WR_L1": 19,
-"WR_L2": 20,
-"WR_L3": 21,
-"WR_L4": 22,
-"WR_L5": 23,
-"TE_SPLIT": 24,
-"RBL1": 25,
-"RBL2": 26,
-"RBL3": 27,
-"RBC1": 28,
-"RBC2": 29,
-"RBC3": 30,
-"RBR1": 31,
-"RBR2": 32,
-"RBR3": 33,
-"QBU": 34,
-"QBS": 35,
-"KICKOFF_KICKER": 36,
-"PLACE_KICKER": 37,
-"PLACE_HOLDER": 38,
-"PUNTER": 39,
-"KICKOFF_TEAM": 40,
-"KICK_RETURN": 41
+    "OL": 1,
+    "CENTER": 2,
+    "QB": 3,
+    "T": 4,
+    "F": 5,
+    "LTE": 6,
+    "LUNBTACKLE": 7,
+    "RTE": 8,
+    "RUNBTACKLE": 9,
+    "LWG1": 10,
+    "LWG2": 11,
+    "RWG1": 12,
+    "RWG2": 13,
+    "WR_R1": 14,
+    "WR_R2": 15,
+    "WR_R3": 16,
+    "WR_R4": 17,
+    "WR_R5": 18,
+    "WR_L1": 19,
+    "WR_L2": 20,
+    "WR_L3": 21,
+    "WR_L4": 22,
+    "WR_L5": 23,
+    "TE_SPLIT": 24,
+    "RBL1": 25,
+    "RBL2": 26,
+    "RBL3": 27,
+    "RBC1": 28,
+    "RBC2": 29,
+    "RBC3": 30,
+    "RBR1": 31,
+    "RBR2": 32,
+    "RBR3": 33,
+    "QBU": 34,
+    "QBS": 35,
+    "KICKOFF_KICKER": 36,
+    "PLACE_KICKER": 37,
+    "PLACE_HOLDER": 38,
+    "PUNTER": 39,
+    "KICKOFF_TEAM": 40,
+    "KICK_RETURN": 41
 }
     
 #========================================== Classes and Helper Methods =============================================
@@ -140,6 +137,21 @@ class NNType:
 		string = "NN Model: DNN_WEIGHTS=[{0}], DNN_CONFIG={1}".format(self.DNN_WEIGHTS, self.DNN_CONFIG)
 
 		return string;
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Prepare training data from video files."
+    )
+
+    # Dev / Prod flags (mutually exclusive)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--dev", action="store_true", help="Run in dev mode")
+    mode.add_argument("--prod", action="store_true", help="Run in prod mode")
+
+    parser.add_argument("-i", "--input", help="Path to input directory containing .mp4 files")
+    parser.add_argument("-o", "--output", help="Path to output / staging directory")
+
+    return parser.parse_args()
 
 def create_and_write_csv(directory, file_path, data):
 
@@ -198,8 +210,6 @@ def load_offenseClass_data(offenseClass, data):
     data[n] = data[n] + (tmpList)
 
 def process_videos(video_files, output_directory, playTypeClassifier, offenseDetector, debug, videoPlayer, SAMPLE_RATE):
-    
-    # video_files = ["C:\\Users\\ArturoD\\Documents\\PLAYTYPE_EXPERIMENT\\SMALL_DATASET\\MOREKICKS\\KICKOFF\\Madison-v-Helix-Play-93_SL.mp4"]
     
     for videoPath in video_files:
 
@@ -302,7 +312,8 @@ def load_nn(type, number, NNSize, NN_Type):
         return ObjectClassifier(NN.DNN_WEIGHTS, NN.DNN_CONFIG, NN.DNN_CLASSNAMES, NN.DEFAULT_NETWORK_SIZE)
 
     return ObjectDetector(NN.DNN_WEIGHTS, NN.DNN_CONFIG, NN.DNN_CLASSNAMES, NN.DEFAULT_NETWORK_SIZE)
- 
+
+
 #
 #============================================ Main Driver code ===========================================
 #
@@ -312,20 +323,15 @@ def load_nn(type, number, NNSize, NN_Type):
 #
 def main():
     print ("------- prepareTrainingData.py -------")
-    
-    if(DEVELOPER_DEBUGGING_MODE == True):
-        args = {}
-        args['input']   = directory     #"/Users/jeredaasheim/Documents/2MinuteWarning/Google Drive/PLAYTYPE_EXPERIMENT/SMALL_DATASET/"    
-        args['output']  = stagingDir    #"/Users/jeredaasheim/Downloads/ARTURO_WORK/"       
+
+    args = parse_args()
+
+    if(args.prod == True):
+        input_path = args.input
+        output_path = args.output
     else:
-        ap = argparse.ArgumentParser()
-        ap.add_argument("-i", "--input", required=True, help="path to input directory")
-        ap.add_argument("-o", "--output", required=True, help="path to output directory")
-        args = vars(ap.parse_args())
-    
-    # Set Input and output directory
-    input_path = args.get('input')
-    output_path = args.get('output')
+        input_path = directory
+        output_path = stagingDir
     
     test_path = output_path + 'TEST\\'
     train_path = output_path + 'TRAIN\\'
