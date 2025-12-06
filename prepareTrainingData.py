@@ -411,6 +411,9 @@ def main():
     
     # Process the testing videos
     process_videos(test_files, test_path, playTypeClassifier, offenseDetector, debug, videoPlayer, SAMPLE_RATE)
+
+    # Process the validate videos
+    process_videos(test_files, val_path, playTypeClassifier, offenseDetector, debug, videoPlayer, SAMPLE_RATE)
     
     
     print(f'Total files stagged: {len(video_files)}')
