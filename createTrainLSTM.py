@@ -28,11 +28,8 @@ from tensorflow.keras.callbacks import LearningRateScheduler, EarlyStopping, Cal
 
 #==================================================== DEBUGGING ====================================================
 
-#NOTE: Only enable DEVELOPER_DEBUGGING_MODE if the debugger is attached and this is the main script (vs. being included by a parent script like Bobby.py)
-DEVELOPER_DEBUGGING_MODE = True if sys.gettrace() is not None and __name__ == '__main__' else False
-
-stagingDir = 'C:\\Users\\ArturoD\\Documents\\PLAYTYPE_EXPERIMENT\\STAGING\\TRAIN\\'
-modelDir = 'C:\\Users\\ArturoD\\Documents\\PLAYTYPE_EXPERIMENT\\MODEL\\'
+stagingDir = 'C:\\Users\\arturo.diaz\\Documents\\PLAYTYPE_EXPERIMENT\\STAGING\\'
+modelDir = 'C:\\Users\\arturo.diaz\\Documents\\GitHub\\MLProject\\MODEL\\'
 
 #==================================================== GLOBALS ======================================================
 #MAX_SAMPLES = 360  # Normalize each sequence to 360 samples
@@ -50,27 +47,65 @@ TEST_SPLIT = 0.10
 
 #========================================== Classes and Helper Methods =============================================
 
-# Load and normalize individual CSV files
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Prepare training data from video files."
+    )
+
+    # Dev / Prod flags (mutually exclusive)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--dev", action="store_true", help="Run in dev mode")
+    mode.add_argument("--prod", action="store_true", help="Run in prod mode")
+
+    parser.add_argument("-i", "--input", help="Path to input directory containing .mp4 files")
+    parser.add_argument("-o", "--output", help="Path to output / staging directory")
+
+    return parser.parse_args()
+
 def load_and_normalize_data(directory, max_samples):
     all_X = []
     all_y = []
     fileNames = []
     
     print("Loading and normalizing training data from:", directory)
-    for file_name in os.listdir(directory):
-        if file_name.endswith('.csv'):
-            df = pd.read_csv(os.path.join(directory, file_name))
-            X = pad_sequences([df['Frame'].values], maxlen=max_samples, dtype='int32', padding='post', truncating='post')
-            all_X.append(X)
-            all_y.extend([df['Truth'].iloc[0]] * len(X))  # Assuming all rows in a CSV file have the same Truth label
+    for file_name in sorted(os.listdir(directory)):
+        if not file_name.endswith('.csv'):
+            continue
 
-            fileNames.append(file_name)
-            
-    # Combine all sequences and labels
-    return np.vstack(all_X), all_y, fileNames
+        csv_path = os.path.join(directory, file_name)
+        df = pd.read_csv(csv_path)
 
+        if df.empty:
+            print(f"Warning: {csv_path} is empty, skipping.")
+            continue
 
-# Encode labels
+        # Frame index as the feature.
+        #TODO upgrade this later to include richer features.
+        seq = df['Frame'].values
+
+        # Pad/truncate this play to max_samples timesteps
+        X = pad_sequences(
+            [seq],
+            maxlen=max_samples,
+            dtype='int32',
+            padding='post',
+            truncating='post'
+        )  # shape: (1, max_samples)
+
+        all_X.append(X)
+        all_y.append(df['Truth'].iloc[0])  # one label per play
+        fileNames.append(file_name)
+
+    if not all_X:
+        raise ValueError(f"No CSV files found in {directory}")
+
+    # Combine all plays into a single array:
+    # (num_plays, max_samples)
+    X = np.vstack(all_X)
+    y = np.array(all_y)
+
+    return X, y, fileNames
+
 def encode_labels(labels, outputPath):
     encoder = LabelEncoder()
     encoded_labels = encoder.fit_transform(labels)
@@ -83,7 +118,6 @@ def encode_labels(labels, outputPath):
             
     return to_categorical(encoded_labels)
 
-# Build LSTM Model
 def build_lstm(input_shape, num_classes):
     model = Sequential()
     model.add(LSTM(50, input_shape=input_shape, return_sequences=True))
@@ -94,9 +128,6 @@ def build_lstm(input_shape, num_classes):
     
     return model
 
-#
-# Learning rate schedule
-#
 def lrSchedule(epoch, lr):
     if epoch < LEARNING_RATE_ADJUSTMENT_EPOCH:
         return float(lr)
@@ -112,7 +143,6 @@ class LoggingCallback(Callback):
         logs = logs or {}
         self.logger.info(f'Epoch {epoch + 1}: {logs}')
 
-# Custom early stopping callback
 class CustomEarlyStopping(EarlyStopping):
     def __init__(self, patience=0, **kwargs):
         super().__init__(patience=patience, **kwargs)
@@ -122,7 +152,6 @@ class CustomEarlyStopping(EarlyStopping):
         if self.stopped_epoch > 0:
             print(f"INFO: early stopping training because of no observed loss function improvement in {self.patience} epochs")
 
-
 #
 #============================================ Main Driver code ===========================================
 #
@@ -131,124 +160,91 @@ class CustomEarlyStopping(EarlyStopping):
 def main():
     print ("------- prepareTrainingData.py -------")
     
-    if(DEVELOPER_DEBUGGING_MODE == True):
-        args = {}
-        args['input']   = stagingDir
-        args['output']  = modelDir
-    else:
-        ap = argparse.ArgumentParser()
-        ap.add_argument("-i", "--input", required=True, help="path to staging directory")
-        ap.add_argument("-o", "--output", required=True, help="path to output directory for model")
-        args = vars(ap.parse_args())
-        
-    data_directory = args.get('input')
-    outputPath = args.get('output')
-    #model_path = outputPath + 'model.h5'
-    
-    if not os.path.isdir(data_directory):
-        print(f"Error: The input directory {data_directory} does not exist.")
-        exit(0)
-    
-    trainDir = os.path.join(stagingDir, 'train')
-    validDir = os.path.join(stagingDir, 'valid')
+    # Gather arguments
+    args = parse_args()
 
-    if(os.path.exists(trainDir) == True):
-        shutil.rmtree(trainDir)
+    if(args.prod == True):
+        staging_root = args.input
+        outputPath = args.output
+    else:
+        staging_root = stagingDir
+        outputPath = modelDir
     
-    if(os.path.exists(validDir) == True):
-        shutil.rmtree(validDir)
-    
-    #
+    trainDir = os.path.join(staging_root, 'TRAIN')
+    validDir = os.path.join(staging_root, 'VAL')
+
+    if not os.path.isdir(trainDir) or not os.path.isdir(validDir):
+        print(f"Error: TRAIN/VAL directories not found under {staging_root}")
+        exit(0)
+
     # Set up logging
-    #
     logPath = os.path.join(outputPath, 'training_log.txt')
     logging.basicConfig(level=logging.INFO, handlers=[logging.FileHandler(logPath), logging.StreamHandler(sys.stdout)])
     logger = logging.getLogger()
     
-    #
     # Normalize each sequence to MAX_SAMPLES
-    #
-    X, y, fileNames = load_and_normalize_data(data_directory, MAX_SAMPLES)
+    X_train, y_train, trainFiles = load_and_normalize_data(trainDir, MAX_SAMPLES)
+    X_val,   y_val,   valFiles = load_and_normalize_data(validDir,  MAX_SAMPLES)
     
-    #
     # Reshape for LSTM input
-    #
-    X = np.expand_dims(X, -1)
-    inputShape = (X.shape[1], X.shape[2])
+    X_train = np.expand_dims(X_train, -1)
+    X_val   = np.expand_dims(X_val,   -1)
     
-    #
-    # Get the list of unique names from the array y
-    #
-    classNames = np.unique(y)
+    inputShape = (X_train.shape[1], X_train.shape[2])
+    
+    # Label encoding: encode train+val together so mapping is consistent
+    y_all = np.concatenate([y_train, y_val])
+    y_all_cat = encode_labels(y_all, outputPath)  # one-hot
+
+    y_train_cat = y_all_cat[:len(y_train)]
+    y_val_cat   = y_all_cat[len(y_train):]
+
+    numClasses = y_train_cat.shape[1]
+    classNames = np.unique(y_all)
     print("Class names:", classNames)
+    print("Num classes:", numClasses)
 
-    y = encode_labels(y, outputPath)
-    numClasses = y.shape[1]
-    
-    # Split data and file names into training and validation sets
-    X_train, X_val, y_train, y_val, trainFiles, valFiles = train_test_split(X, y, fileNames, test_size=TEST_SPLIT, random_state=42)
-    
-    
-    #
-    # Construct our model
-    #
+    # Build model
     model = build_lstm(inputShape, numClasses)
-    model.fit(X, y, epochs=50, batch_size=32, verbose=1)
-    
-    
-    #
-    # Construct our model
-    #
-    #model = buildLSTM(inputShape, numClasses, modelSize=MODEL_SIZE_SMALL)
-    #model = buildLSTM(inputShape, numClasses, modelSize=MODEL_SIZE_NANO)
-    
-    # Callbacks for early stopping and learning rate scheduling
-    earlyStopping = CustomEarlyStopping(monitor='val_loss', patience=PATIENCE, restore_best_weights=True)
-    lrScheduler = LearningRateScheduler(lrSchedule)
-    loggingCallback = LoggingCallback(logger)
 
-    # Training
-    #DISABLED history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=1)
-    history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=1, callbacks=[earlyStopping, loggingCallback]) #DISABLED custom scheduler lrScheduler])
-    
-    modelPath = os.path.join(outputPath, 'runPass_model.keras')
+    # Callbacks
+    logger.info(f"Model input shape: {inputShape}")
+    logger.info(f"Number of training samples: {X_train.shape[0]}")
+    logger.info(f"Number of validation samples: {X_val.shape[0]}")
+
+    earlyStopping = CustomEarlyStopping(patience=PATIENCE, min_delta=0.0001)
+    loggingCallback = LoggingCallback(logger)
+    # lrScheduler = LearningRateScheduler(lrSchedule)
+
+    # Train
+    history = model.fit(
+        X_train,
+        y_train_cat,
+        validation_data=(X_val, y_val_cat),
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
+        verbose=1,
+        callbacks=[earlyStopping, loggingCallback]  # add lrScheduler if you want
+    )
+
+    # Save model
+    modelPath = os.path.join(outputPath, 'model.keras')
     save_model(model, modelPath)
-    
-    #
-    # Output the training and validation file names to text files
-    #
+
+    # Save file lists for reference
     trainFilesPath = os.path.join(outputPath, 'train.txt')
     with open(trainFilesPath, 'w') as f:
-        f.write('\n'.join([os.path.basename(file) for file in trainFiles]))
+        f.write('\n'.join([os.path.basename(fpath) for fpath in trainFiles]))
 
     valFilesPath = os.path.join(outputPath, 'valid.txt')
     with open(valFilesPath, 'w') as f:
-        f.write('\n'.join([os.path.basename(file) for file in valFiles]))
-
-    #
-    # Create subdirectories in stagingDir
-    #        
-    os.makedirs(trainDir, exist_ok=True)
-    os.makedirs(validDir, exist_ok=True)
-
-    #
-    # Copy files to respective directories
-    #
-    for file in trainFiles:
-        shutil.copy(os.path.join(data_directory, file), trainDir)
-
-    for file in valFiles:
-        shutil.copy(os.path.join(data_directory, file), validDir)
+        f.write('\n'.join([os.path.basename(fpath) for fpath in valFiles]))
 
     print("")
     print("Model saved to ", modelPath)
-    print("Training files saved to:   ", trainFilesPath)    
-    print("Validation files saved to: ", valFilesPath)
+    print("Training files listed in:   ", trainFilesPath)
+    print("Validation files listed in: ", valFilesPath)
     print("")
-    
-    # Save model
-    # save_model(model, model_path)
-    # print("Model saved to", model_path)
 
 if __name__ == '__main__':
     main()

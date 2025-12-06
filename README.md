@@ -8,6 +8,9 @@ Python 3.13
 opencv-python
 pip-25.3
 onnxruntime
+pandas
+tensorflow
+scikit-learn
 
 Steps on how to use:
 

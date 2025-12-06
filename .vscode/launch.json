@@ -23,22 +23,46 @@
         "--output", "C:/Users/arturo.diaz/Documents/PLAYTYPE_EXPERIMENT/STAGING"]
     },
     {
-      "name": "Create Train Model",
+      "name": "Dev Create Train Model",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/createTrainLSTM.py",
       "console": "integratedTerminal",
       "cwd": "${workspaceFolder}",
-      "args": []
+      "args": ["--dev"]
     },
     {
-      "name": "Load Test Model",
+      "name": "Prod Create Train Model",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/createTrainLSTM.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--prod",
+        "--input", "C:/Users/arturo.diaz/Documents/PLAYTYPE_EXPERIMENT/SMALL_DATASET",
+        "--output", "C:/Users/arturo.diaz/Documents/PLAYTYPE_EXPERIMENT/STAGING"]
+    },
+    {
+      "name": "Dev Load Test Model",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/loadTestLSTM.py",
       "console": "integratedTerminal",
       "cwd": "${workspaceFolder}",
-      "args": []
+      "args": ["--dev"]
+    },
+    {
+      "name": "Prod Load Test Model",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/loadTestLSTM.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--prod",
+        "--input", "C:/Users/arturo.diaz/Documents/PLAYTYPE_EXPERIMENT/SMALL_DATASET",
+        "--output", "C:/Users/arturo.diaz/Documents/PLAYTYPE_EXPERIMENT/STAGING"]
     }
   ]
 }
