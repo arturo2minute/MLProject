@@ -1,0 +1,21 @@
+cd ~
+
+cd Documents/GitHub/MLProject
+
+source .venv/Scripts/activate
+
+python prepareTrainingData.py \
+  --prod \
+  --input "C:\\Users\\arturo.diaz\\Documents\\PLAYTYPE_EXPERIMENT\\SMALL_DATASET" \
+  --output "C:\\Users\\arturo.diaz\\Documents\\PLAYTYPE_EXPERIMENT\\STAGING\\" \
+  > prep_log.txt 2>&1
+
+python createTrainLSTM.py \
+  --prod \
+  --input "C:\\Users\\arturo.diaz\\Documents\\PLAYTYPE_EXPERIMENT\\STAGING\\" \
+  --output "C:\\Users\\arturo.diaz\\Documents\\GitHub\\MLProject\\MODEL\\"
+
+python loadTESTLSTM.py \
+  --prod \
+  --input "C:\\Users\\arturo.diaz\\Documents\\PLAYTYPE_EXPERIMENT\\STAGING\\" \
+  --output "C:\\Users\\arturo.diaz\\Documents\\GitHub\\MLProject\\MODEL\\runs\\20251208_130659_150t_43f_bilstm_classw"

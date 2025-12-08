@@ -1,0 +1,40 @@
+{
+  "split": "test",
+  "accuracy": 0.866231647634584,
+  "recall_macro": 0.8533659690291211,
+  "f1_macro": 0.7939441428538446,
+  "confusion_matrix": {
+    "labels": [
+      "FIELDGOAL",
+      "KICKOFF",
+      "OFFENSE",
+      "PUNT"
+    ],
+    "matrix": [
+      [
+        237,
+        0,
+        17,
+        1
+      ],
+      [
+        1,
+        49,
+        3,
+        0
+      ],
+      [
+        1,
+        0,
+        24,
+        7
+      ],
+      [
+        0,
+        0,
+        52,
+        221
+      ]
+    ]
+  }
+}

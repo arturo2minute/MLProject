@@ -56,7 +56,7 @@
       "args": [
         "--prod",
         "--input", "C:/Users/arturo.diaz/Documents/PLAYTYPE_EXPERIMENT/SMALL_DATASET",
-        "--output", "C:/Users/arturo.diaz/Documents/PLAYTYPE_EXPERIMENT/model"]
+        "--output", "C:/Users/arturo.diaz/Documents/PLAYTYPE_EXPERIMENT/MODEL/runs/20251208_130542_150t_43f_bilstm_classw"]
     }
   ]
 }
