@@ -1,0 +1,5 @@
+# Model files / NN assets (if you don't want them in Git)
+nn/
+
+# Local utilities you don't want to track
+utils/
