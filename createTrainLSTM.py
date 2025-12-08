@@ -25,6 +25,7 @@ from tensorflow.keras.models import save_model
 from tensorflow.keras.optimizers import Adam
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.callbacks import LearningRateScheduler, EarlyStopping, Callback
+from sklearn.utils.class_weight import compute_class_weight
 
 #==================================================== DEBUGGING ====================================================
 
@@ -57,17 +58,17 @@ def parse_args():
     mode.add_argument("--dev", action="store_true", help="Run in dev mode")
     mode.add_argument("--prod", action="store_true", help="Run in prod mode")
 
-    parser.add_argument("-i", "--input", help="Path to input directory containing .mp4 files")
+    parser.add_argument("-i", "--input", help="Path to input directory containing csv files")
     parser.add_argument("-o", "--output", help="Path to output / staging directory")
 
     return parser.parse_args()
 
-def load_and_normalize_data(directory, max_samples):
+def load_and_normalize_data(directory, max_samples, feature_cols=None):
     all_X = []
     all_y = []
     fileNames = []
     
-    print("Loading and normalizing training data from:", directory)
+    print("Loading and normalizing data from:", directory)
     for file_name in sorted(os.listdir(directory)):
         if not file_name.endswith('.csv'):
             continue
@@ -80,14 +81,20 @@ def load_and_normalize_data(directory, max_samples):
             continue
 
         # Frame index as the feature.
-        #TODO upgrade this later to include richer features.
-        seq = df['Frame'].values
+        # Decide feature columns once (first file)
+        if feature_cols is None:
+            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            feature_cols = [c for c in numeric_cols if c != 'Truth']
+            # print("Using feature columns:", feature_cols)
+
+        # Gives matrix of all rows in CSV
+        features = df[feature_cols].values
 
         # Pad/truncate this play to max_samples timesteps
         X = pad_sequences(
-            [seq],
+            [features],
             maxlen=max_samples,
-            dtype='int32',
+            dtype='float32',
             padding='post',
             truncating='post'
         )  # shape: (1, max_samples)
@@ -120,12 +127,23 @@ def encode_labels(labels, outputPath):
 
 def build_lstm(input_shape, num_classes):
     model = Sequential()
-    model.add(LSTM(50, input_shape=input_shape, return_sequences=True))
-    model.add(LSTM(50))
-    model.add(Dense(200, activation='relu'))
+    model.add(Bidirectional(
+        LSTM(64, return_sequences=True),
+        input_shape=input_shape
+    ))
+    model.add(Dropout(0.3))
+    model.add(Bidirectional(LSTM(64)))
+    model.add(Dropout(0.3))
+    model.add(Dense(128, activation='relu'))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.3))
     model.add(Dense(num_classes, activation='softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    
+
+    model.compile(
+        loss='categorical_crossentropy',
+        optimizer=Adam(learning_rate=1e-3),
+        metrics=['accuracy']
+    )
     return model
 
 def lrSchedule(epoch, lr):
@@ -158,7 +176,7 @@ class CustomEarlyStopping(EarlyStopping):
 
 # Main function
 def main():
-    print ("------- prepareTrainingData.py -------")
+    print("------- createTrainLSTM.py -------")
     
     # Gather arguments
     args = parse_args()
@@ -186,23 +204,33 @@ def main():
     X_train, y_train, trainFiles = load_and_normalize_data(trainDir, MAX_SAMPLES)
     X_val,   y_val,   valFiles = load_and_normalize_data(validDir,  MAX_SAMPLES)
     
-    # Reshape for LSTM input
-    X_train = np.expand_dims(X_train, -1)
-    X_val   = np.expand_dims(X_val,   -1)
-    
     inputShape = (X_train.shape[1], X_train.shape[2])
     
-    # Label encoding: encode train+val together so mapping is consistent
+    # Encode train+val together so mapping is consistent
     y_all = np.concatenate([y_train, y_val])
-    y_all_cat = encode_labels(y_all, outputPath)  # one-hot
+    # Add unique labels to MODEL dir
+    y_all_cat = encode_labels(y_all, outputPath) # one-hot
 
+    # Encode classifications for all samples [1,0,0,0], [0,1,0,0]
     y_train_cat = y_all_cat[:len(y_train)]
     y_val_cat   = y_all_cat[len(y_train):]
 
     numClasses = y_train_cat.shape[1]
     classNames = np.unique(y_all)
     print("Class names:", classNames)
-    print("Num classes:", numClasses)
+
+    # Convert one-hot to integer labels for weighting
+    y_train_int = np.argmax(y_train_cat, axis=1)
+
+    # Compute Class weights
+    class_weights = compute_class_weight(
+        class_weight='balanced',
+        classes=np.unique(y_train_int),
+        y=y_train_int
+    )
+    class_weight_dict = {i: w for i, w in enumerate(class_weights)}
+
+    print("Class weights:", class_weight_dict)
 
     # Build model
     model = build_lstm(inputShape, numClasses)
@@ -223,8 +251,9 @@ def main():
         validation_data=(X_val, y_val_cat),
         epochs=EPOCHS,
         batch_size=BATCH_SIZE,
+        class_weight=class_weight_dict,
         verbose=1,
-        callbacks=[earlyStopping, loggingCallback]  # add lrScheduler if you want
+        callbacks=[earlyStopping, loggingCallback]
     )
 
     # Save model
@@ -244,6 +273,7 @@ def main():
     print("Model saved to ", modelPath)
     print("Training files listed in:   ", trainFilesPath)
     print("Validation files listed in: ", valFilesPath)
+    print ("------- Finished -------") 
     print("")
 
 if __name__ == '__main__':

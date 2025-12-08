@@ -105,3 +105,6 @@ INFO:root:Epoch 48: {'accuracy': 1.0, 'loss': 0.0016309234779328108, 'val_accura
 INFO:root:Epoch 49: {'accuracy': 1.0, 'loss': 0.0014486119616776705, 'val_accuracy': 0.20000000298023224, 'val_loss': 6.500026702880859}
 INFO:root:Epoch 50: {'accuracy': 1.0, 'loss': 0.0012961167376488447, 'val_accuracy': 0.20000000298023224, 'val_loss': 6.5800652503967285}
 INFO:root:Epoch 51: {'accuracy': 1.0, 'loss': 0.0011643407633528113, 'val_accuracy': 0.20000000298023224, 'val_loss': 6.654416561126709}
+INFO:root:Model input shape: (150, 43)
+INFO:root:Number of training samples: 2150
+INFO:root:Number of validation samples: 613
