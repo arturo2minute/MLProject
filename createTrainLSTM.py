@@ -9,10 +9,11 @@
 
 import pandas as pd
 import numpy as np
-import os, sys
+import os, sys, json
 import argparse
 import json
 import logging
+from datetime import datetime
 import shutil
 
 import tensorflow as tf
@@ -33,7 +34,7 @@ stagingDir = 'C:\\Users\\arturo.diaz\\Documents\\PLAYTYPE_EXPERIMENT\\STAGING\\'
 modelDir = 'C:\\Users\\arturo.diaz\\Documents\\GitHub\\MLProject\\MODEL\\'
 
 #==================================================== GLOBALS ======================================================
-#MAX_SAMPLES = 360  # Normalize each sequence to 360 samples
+
 MAX_SAMPLES = 150
 
 EPOCHS = 200
@@ -44,7 +45,17 @@ LEARNING_RATE_ADJUSTMENT_EPOCH = 50
 
 PATIENCE = 40
 
-TEST_SPLIT = 0.10    
+TEST_SPLIT = 0.10
+
+LSTM_UNITS = 64
+
+DENSE_UNITS = 128
+
+DROPOUT = 0.3
+
+LEARNING_RATE = 1e-3
+
+SEED = 42
 
 #========================================== Classes and Helper Methods =============================================
 
@@ -111,7 +122,7 @@ def load_and_normalize_data(directory, max_samples, feature_cols=None):
     X = np.vstack(all_X)
     y = np.array(all_y)
 
-    return X, y, fileNames
+    return X, y, fileNames, feature_cols
 
 def encode_labels(labels, outputPath):
     encoder = LabelEncoder()
@@ -119,8 +130,8 @@ def encode_labels(labels, outputPath):
     
     # Save the labels and their corresponding encoders to a JSON file
     label_mapping = {int(encoded_label): label for label, encoded_label in zip(encoder.classes_, encoder.transform(encoder.classes_))}
-    outputPath = outputPath + 'labels.json'
-    with open(outputPath, 'w') as f:
+    labels_path = os.path.join(outputPath, 'labels.json')
+    with open(labels_path, 'w') as f:
         json.dump(label_mapping, f)
             
     return to_categorical(encoded_labels)
@@ -131,17 +142,17 @@ def build_lstm(input_shape, num_classes):
         LSTM(64, return_sequences=True),
         input_shape=input_shape
     ))
-    model.add(Dropout(0.3))
+    model.add(Dropout(DROPOUT))
     model.add(Bidirectional(LSTM(64)))
-    model.add(Dropout(0.3))
-    model.add(Dense(128, activation='relu'))
+    model.add(Dropout(DROPOUT))
+    model.add(Dense(DENSE_UNITS, activation='relu'))
     model.add(BatchNormalization())
-    model.add(Dropout(0.3))
+    model.add(Dropout(DROPOUT))
     model.add(Dense(num_classes, activation='softmax'))
 
     model.compile(
         loss='categorical_crossentropy',
-        optimizer=Adam(learning_rate=1e-3),
+        optimizer=Adam(learning_rate=LEARNING_RATE),
         metrics=['accuracy']
     )
     return model
@@ -183,11 +194,11 @@ def main():
 
     if(args.prod == True):
         staging_root = args.input
-        outputPath = args.output
+        model_root = args.output
     else:
         staging_root = stagingDir
-        outputPath = modelDir
-    
+        model_root = modelDir
+
     trainDir = os.path.join(staging_root, 'TRAIN')
     validDir = os.path.join(staging_root, 'VAL')
 
@@ -196,14 +207,35 @@ def main():
         exit(0)
 
     # Set up logging
-    logPath = os.path.join(outputPath, 'training_log.txt')
-    logging.basicConfig(level=logging.INFO, handlers=[logging.FileHandler(logPath), logging.StreamHandler(sys.stdout)])
-    logger = logging.getLogger()
-    
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_150t_43f_bilstm_classw"
+    run_dir = os.path.join(model_root, "runs", run_id)
+    os.makedirs(run_dir, exist_ok=True)
+
+    outputPath = run_dir
+
+    # Logging: file + stdout
+    logPath = os.path.join(outputPath, "training_log.txt")
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[logging.FileHandler(logPath), logging.StreamHandler(sys.stdout)]
+    )
+    logger = logging.getLogger(__name__)
+
+    # Copy splits.json into the run dir for full traceability
+    splits_src = os.path.join(model_root, "splits.json")
+    splits_dst = os.path.join(outputPath, "splits.json")
+    if os.path.exists(splits_src):
+        shutil.copy2(splits_src, splits_dst)
+    else:
+        logger.info(f"Warning: splits.json not found in {model_root}; run will not record split file.")
     # Normalize each sequence to MAX_SAMPLES
-    X_train, y_train, trainFiles = load_and_normalize_data(trainDir, MAX_SAMPLES)
-    X_val,   y_val,   valFiles = load_and_normalize_data(validDir,  MAX_SAMPLES)
+    X_train, y_train, trainFiles, feature_cols = load_and_normalize_data(trainDir, MAX_SAMPLES)
+    X_val,   y_val,   valFiles, _ = load_and_normalize_data(validDir,  MAX_SAMPLES, feature_cols=feature_cols)
     
+    # Save feature columns for inference
+    with open(os.path.join(outputPath, "feature_cols.json"), "w") as f:
+        json.dump(feature_cols, f, indent=2)
+
     inputShape = (X_train.shape[1], X_train.shape[2])
     
     # Encode train+val together so mapping is consistent
@@ -217,7 +249,7 @@ def main():
 
     numClasses = y_train_cat.shape[1]
     classNames = np.unique(y_all)
-    print("Class names:", classNames)
+    logger.info(f"Class names: {classNames}")
 
     # Convert one-hot to integer labels for weighting
     y_train_int = np.argmax(y_train_cat, axis=1)
@@ -229,20 +261,51 @@ def main():
         y=y_train_int
     )
     class_weight_dict = {i: w for i, w in enumerate(class_weights)}
+    logger.info(f"Class weights: {class_weight_dict}")
 
-    print("Class weights:", class_weight_dict)
+    # Doc Config
+    config = {
+        "run_id": run_id,
+        "max_samples": MAX_SAMPLES,
+        "architecture": {
+            "type": "BiLSTM",
+            "lstm_units": LSTM_UNITS,
+            "dense_units": DENSE_UNITS,
+            "dropout": DROPOUT,
+        },
+        "training": {
+            "epochs": EPOCHS,
+            "batch_size": BATCH_SIZE,
+            "class_weight": class_weight_dict,
+            "patience": PATIENCE,
+            "optimizer": "Adam",
+            "learning_rate": LEARNING_RATE,
+            "seed": SEED,
+        },
+        "data": {
+            "staging_root": staging_root,
+            "train_dir": trainDir,
+            "val_dir": validDir,
+            "train_count": int(X_train.shape[0]),
+            "val_count": int(X_val.shape[0]),
+        },
+        "labels": sorted(list(map(str, classNames)))
+    }
+
+    config_path = os.path.join(outputPath, "config.json")
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
 
     # Build model
     model = build_lstm(inputShape, numClasses)
 
-    # Callbacks
+    # Doc Callbacks
     logger.info(f"Model input shape: {inputShape}")
     logger.info(f"Number of training samples: {X_train.shape[0]}")
     logger.info(f"Number of validation samples: {X_val.shape[0]}")
 
     earlyStopping = CustomEarlyStopping(patience=PATIENCE, min_delta=0.0001)
     loggingCallback = LoggingCallback(logger)
-    # lrScheduler = LearningRateScheduler(lrSchedule)
 
     # Train
     history = model.fit(
@@ -260,21 +323,27 @@ def main():
     modelPath = os.path.join(outputPath, 'model.keras')
     save_model(model, modelPath)
 
-    # Save file lists for reference
+    # Doc model
+    metrics_val_path = os.path.join(outputPath, "metrics_val.json")
+    with open(metrics_val_path, "w") as f:
+        json.dump(history.history, f, indent=2)
+
+    # Doc train files
     trainFilesPath = os.path.join(outputPath, 'train.txt')
     with open(trainFilesPath, 'w') as f:
         f.write('\n'.join([os.path.basename(fpath) for fpath in trainFiles]))
 
+    # Doc val files
     valFilesPath = os.path.join(outputPath, 'valid.txt')
     with open(valFilesPath, 'w') as f:
         f.write('\n'.join([os.path.basename(fpath) for fpath in valFiles]))
 
-    print("")
-    print("Model saved to ", modelPath)
-    print("Training files listed in:   ", trainFilesPath)
-    print("Validation files listed in: ", valFilesPath)
-    print ("------- Finished -------") 
-    print("")
+    logger.info(f"")
+    logger.info(f"Model saved to {modelPath}")
+    logger.info(f"Training files listed in: {trainFilesPath}")
+    logger.info(f"Validation files listed in: {valFilesPath}")
+    logger.info(f"------- Finished -------")
+    logger.info(f"")
 
 if __name__ == '__main__':
     main()
