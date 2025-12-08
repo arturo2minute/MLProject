@@ -244,12 +244,16 @@ def process_videos(video_files, output_directory, playTypeClassifier, offenseDet
             (H, W) = frame.shape[:2]
             
             if(currentFrame % SAMPLE_RATE == 0):
-                # Classify
+                # Classify play type
                 playTypeClass = playTypeClassifier.classifyObject(frame, confidenceThreshold=DEFAULT_CONFIDENCE_THRESHOLD, returnAllClassifications=True, debug=debug)
+                
+                # Classify offensive positions
                 offenseClass = offenseDetector.detectObjects(frame, confidenceThreshold=DEFAULT_CONFIDENCE_THRESHOLD, debug=debug)
 
-                # Load Data
+                # Load Frame, Prediction, Confidence data
                 load_playTypeClass_data(playTypeClass, data, videoPath, currentFrame)
+
+                # Load positional data
                 load_offenseClass_data(offenseClass, data)
 
             # Show the output frame
@@ -413,7 +417,7 @@ def main():
     process_videos(test_files, test_path, playTypeClassifier, offenseDetector, debug, videoPlayer, SAMPLE_RATE)
 
     # Process the validate videos
-    process_videos(test_files, val_path, playTypeClassifier, offenseDetector, debug, videoPlayer, SAMPLE_RATE)
+    process_videos(val_files, val_path, playTypeClassifier, offenseDetector, debug, videoPlayer, SAMPLE_RATE)
     
     
     print(f'Total files stagged: {len(video_files)}')
